@@ -19,9 +19,6 @@ export default function EnhancedUpload({ onUploadComplete }) {
   const [entities, setEntities] = useState([]);
   const [creatingEntity, setCreatingEntity] = useState(false);
 
-  // Remove predefined entities - start with empty system
-  const predefinedEntities = [];
-
   const categories = [
     'GST',
     'Income Tax',
@@ -51,13 +48,14 @@ export default function EnhancedUpload({ onUploadComplete }) {
       const response = await fetch('/api/entities/list');
       if (response.ok) {
         const data = await response.json();
-        setEntities(data); // Only use entities from database, no predefined ones
+        setEntities(data || []);
       } else {
-        setEntities([]); // Start with empty array
+        console.log('No entities found or API error');
+        setEntities([]);
       }
     } catch (error) {
       console.error('Error loading entities:', error);
-      setEntities([]); // Start with empty array on error
+      setEntities([]);
     }
   };
 
@@ -79,6 +77,8 @@ export default function EnhancedUpload({ onUploadComplete }) {
 
   const handleAddEntity = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    
     if (!newEntity.name.trim()) {
       alert('Please enter entity name');
       return;
@@ -88,27 +88,36 @@ export default function EnhancedUpload({ onUploadComplete }) {
     try {
       const response = await fetch('/api/entities/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           entityName: newEntity.name.trim(),
           entityType: newEntity.type
         })
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
       const result = await response.json();
       
-      if (response.ok) {
-        setEntities(prev => [...prev, newEntity.name.trim()]);
-        setFormData(prev => ({ ...prev, entityName: newEntity.name.trim() }));
+      if (result.success) {
+        // Add to local state immediately to prevent refresh
+        const newEntityName = newEntity.name.trim();
+        setEntities(prev => [...prev, newEntityName]);
+        setFormData(prev => ({ ...prev, entityName: newEntityName }));
         setNewEntity({ name: '', type: 'business' });
         setShowAddEntity(false);
-        alert(`✅ Entity "${newEntity.name}" created successfully with folder structure!`);
+        alert(`✅ Entity "${newEntityName}" created successfully with folder structure!`);
       } else {
-        throw new Error(result.error || 'Failed to create entity');
+        throw new Error(result.error || 'Entity creation failed');
       }
     } catch (error) {
       console.error('Entity creation error:', error);
-      alert('❌ Entity creation failed: ' + error.message);
+      alert(`❌ Entity creation failed: ${error.message}`);
     } finally {
       setCreatingEntity(false);
     }
@@ -147,6 +156,7 @@ export default function EnhancedUpload({ onUploadComplete }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
     
     if (!formData.files || formData.files.length === 0) {
       alert('Please select at least one file to upload.');
@@ -181,12 +191,17 @@ export default function EnhancedUpload({ onUploadComplete }) {
         body: uploadFormData,
       });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+      }
+
       const result = await response.json();
 
-      if (response.ok) {
+      if (result.success) {
         alert(`✅ ${result.files.length} file(s) uploaded successfully to:\n${result.files[0]?.path || 'Google Drive'}`);
         
-        // Reset form
+        // Reset form without causing page refresh
         setFormData({
           entityName: '',
           category: '',
@@ -209,10 +224,17 @@ export default function EnhancedUpload({ onUploadComplete }) {
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('❌ Upload failed: ' + error.message);
+      alert(`❌ Upload failed: ${error.message}`);
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleModalClose = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowAddEntity(false);
+    setNewEntity({ name: '', type: 'business' });
   };
 
   return (
@@ -238,12 +260,21 @@ export default function EnhancedUpload({ onUploadComplete }) {
               </select>
               <button
                 type="button"
-                onClick={() => setShowAddEntity(true)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowAddEntity(true);
+                }}
                 className="bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 whitespace-nowrap"
               >
                 + Add New
               </button>
             </div>
+            {entities.length === 0 && (
+              <p className="text-sm text-gray-500 mt-1">
+                No entities found. Click "+ Add New" to create your first entity.
+              </p>
+            )}
           </div>
 
           <div>
@@ -276,6 +307,7 @@ export default function EnhancedUpload({ onUploadComplete }) {
                     placeholder="e.g., New Company Ltd, John Smith"
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     required
+                    autoFocus
                   />
                 </div>
                 <div>
@@ -296,15 +328,16 @@ export default function EnhancedUpload({ onUploadComplete }) {
                 <div className="flex space-x-3 pt-4">
                   <button
                     type="submit"
-                    disabled={creatingEntity}
-                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:bg-gray-400"
+                    disabled={creatingEntity || !newEntity.name.trim()}
+                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
                     {creatingEntity ? 'Creating...' : 'Create Entity'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowAddEntity(false)}
-                    className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600"
+                    onClick={handleModalClose}
+                    disabled={creatingEntity}
+                    className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 disabled:bg-gray-400"
                   >
                     Cancel
                   </button>
