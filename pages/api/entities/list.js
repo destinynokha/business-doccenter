@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     }
 
     const entities = await getEntities();
-    res.status(200).json(entities);
+    res.status(200).json(entities.map(e => e.entityName));
 
   } catch (error) {
     console.error('Error getting entities:', error);
