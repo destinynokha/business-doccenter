@@ -312,6 +312,28 @@ export default function Dashboard() {
 
 // Dashboard Content Component
 function DashboardContent({ dashboardData, formatDate, formatFileSize, getFileIcon, openFileInDrive }) {
+  // Show empty state if no entities exist
+  if (dashboardData.stats.activeEntities === 0) {
+    return (
+      <div className="text-center py-12 bg-white rounded-lg shadow">
+        <div className="text-6xl mb-4">📂</div>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Welcome to Business DocCenter</h3>
+        <p className="text-gray-600 mb-6">Get started by creating your first entity and uploading documents</p>
+        <div className="space-y-4">
+          <div className="bg-blue-50 rounded-lg p-4 mx-auto max-w-md">
+            <h4 className="font-semibold text-blue-900">Quick Start:</h4>
+            <ol className="text-sm text-blue-800 mt-2 space-y-1 text-left">
+              <li>1. Go to <strong>Upload</strong> tab</li>
+              <li>2. Click <strong>"+ Add New"</strong> to create an entity</li>
+              <li>3. Upload your first document</li>
+              <li>4. Watch folders get created automatically!</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
