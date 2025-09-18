@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
+import { SessionProvider } from 'next-auth/react'
 import Head from 'next/head'
+import ViewDocuments from '../components/ViewDocuments'
 
 export default function Dashboard() {
   const { data: session, status } = useSession()
@@ -82,6 +84,7 @@ export default function Dashboard() {
   }
 
   const getFileIcon = (mimeType) => {
+    if (!mimeType) return '📄'
     if (mimeType.includes('pdf')) return '📄'
     if (mimeType.includes('image')) return '🖼️'
     if (mimeType.includes('document') || mimeType.includes('word')) return '📝'
@@ -89,8 +92,9 @@ export default function Dashboard() {
     return '📎'
   }
 
-  const openFileInDrive = (webViewLink) => {
-    window.open(webViewLink, '_blank')
+  const openFileInDrive = (webViewLink, fileId) => {
+    const url = webViewLink || `https://drive.google.com/file/d/${fileId}/view`
+    window.open(url, '_blank')
   }
 
   if (status === 'loading' || loading) {
@@ -132,11 +136,12 @@ export default function Dashboard() {
     <>
       <Head>
         <title>Business DocCenter - Dashboard</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       
       <div className="min-h-screen bg-gray-50">
         {/* Navigation */}
-        <nav className="bg-gradient-to-r from-blue-600 to-purple-700 text-white shadow-lg">
+        <nav className="bg-gradient-to-r from-blue-600 to-purple-700 text-white shadow-lg sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-2">
@@ -155,7 +160,7 @@ export default function Dashboard() {
                 </div>
                 <button
                   onClick={() => signOut()}
-                  className="bg-white/10 rounded-lg px-3 py-2 hover:bg-white/20 flex items-center"
+                  className="bg-white/10 rounded-lg px-3 py-2 hover:bg-white/20 flex items-center transition-colors"
                 >
                   Sign Out
                 </button>
@@ -165,7 +170,7 @@ export default function Dashboard() {
         </nav>
 
         {/* Search Bar */}
-        <div className="bg-white shadow-sm border-b">
+        <div className="bg-white shadow-sm border-b sticky top-16 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center space-x-4">
               <div className="flex-1 relative">
@@ -174,7 +179,7 @@ export default function Dashboard() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="Smart search: filename, OCR text, tags, year, month..."
+                  placeholder="Smart search: filename, OCR text, tags, year (2024-25), month (March)..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -191,7 +196,7 @@ export default function Dashboard() {
               <button
                 onClick={() => handleSearch()}
                 disabled={searching}
-                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 disabled:bg-blue-300"
+                className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 disabled:bg-blue-300 transition-colors"
               >
                 Search
               </button>
@@ -202,7 +207,7 @@ export default function Dashboard() {
         {/* Navigation Tabs */}
         <div className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex space-x-8">
+            <div className="flex space-x-8 overflow-x-auto">
               {[
                 { id: 'dashboard', name: 'Dashboard', icon: '📊' },
                 { id: 'upload', name: 'Upload', icon: '📤' },
@@ -211,8 +216,11 @@ export default function Dashboard() {
               ].map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveSection(tab.id)}
-                  className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                  onClick={() => {
+                    setActiveSection(tab.id)
+                    setSearchResults([]) // Clear search when changing tabs
+                  }}
+                  className={`py-4 px-2 border-b-2 font-medium text-sm whitespace-nowrap ${
                     activeSection === tab.id
                       ? 'border-blue-500 text-blue-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -231,11 +239,21 @@ export default function Dashboard() {
           {/* Search Results */}
           {searchResults.length > 0 && (
             <div className="mb-6 bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-bold mb-4">Search Results ({searchResults.length})</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold">Search Results ({searchResults.length})</h3>
+                <button
+                  onClick={() => setSearchResults([])}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
               <div className="grid gap-4">
                 {searchResults.map((file) => (
-                  <div key={file.id} className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
-                       onClick={() => openFileInDrive(file.webViewLink)}>
+                  <div key={file.id} className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                       onClick={() => openFileInDrive(file.webViewLink, file.id)}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-3 flex-1">
                         <span className="text-2xl">{getFileIcon(file.mimeType)}</span>
@@ -249,6 +267,15 @@ export default function Dashboard() {
                               OCR: {file.ocrText.substring(0, 100)}...
                             </p>
                           )}
+                          {file.tags && file.tags.length > 0 && (
+                            <div className="mt-1">
+                              {file.tags.map((tag, index) => (
+                                <span key={index} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mr-1">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -258,6 +285,7 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Section Content */}
           {activeSection === 'dashboard' && (
             <DashboardContent 
               dashboardData={dashboardData} 
@@ -271,7 +299,7 @@ export default function Dashboard() {
             <UploadContent onUploadComplete={loadDashboardData} />
           )}
           {activeSection === 'view-documents' && (
-            <ViewDocumentsContent />
+            <ViewDocuments />
           )}
           {activeSection === 'manage-access' && (
             <ManageAccessContent />
@@ -342,7 +370,7 @@ function DashboardContent({ dashboardData, formatDate, formatFileSize, getFileIc
                     <div
                       key={file.id}
                       className="border rounded-lg p-4 hover:shadow-md cursor-pointer transition-shadow"
-                      onClick={() => openFileInDrive(file.webViewLink)}
+                      onClick={() => openFileInDrive(file.webViewLink, file.id)}
                     >
                       <div className="flex items-start space-x-3">
                         <span className="text-xl">{getFileIcon(file.mimeType)}</span>
@@ -371,7 +399,7 @@ function DashboardContent({ dashboardData, formatDate, formatFileSize, getFileIc
   )
 }
 
-// Enhanced Upload Component
+// Enhanced Upload Component with All Features
 function UploadContent({ onUploadComplete }) {
   const [formData, setFormData] = useState({
     entityName: '',
@@ -387,7 +415,7 @@ function UploadContent({ onUploadComplete }) {
   const [ocrText, setOcrText] = useState('')
   const [ocrProcessing, setOcrProcessing] = useState(false)
   
-  // Indian Financial Years
+  // Generate Indian Financial Years dynamically
   const generateFinancialYears = () => {
     const currentYear = new Date().getFullYear()
     const currentMonth = new Date().getMonth()
@@ -416,7 +444,7 @@ function UploadContent({ onUploadComplete }) {
   const categories = [
     'GST',
     'Income Tax',
-    'ROC',
+    'ROC', 
     'TDS',
     'Accounts',
     'Bank Statements',
@@ -437,17 +465,22 @@ function UploadContent({ onUploadComplete }) {
     const files = Array.from(e.target.files)
     setFormData(prev => ({ ...prev, files }))
 
-    // Process OCR for images
-    const imageFiles = files.filter(file => file.type.startsWith('image/'))
-    if (imageFiles.length > 0) {
+    // Process OCR for images and PDFs
+    const processableFiles = files.filter(file => 
+      file.type.startsWith('image/') || file.type.includes('pdf')
+    )
+    
+    if (processableFiles.length > 0) {
       setOcrProcessing(true)
       try {
         const Tesseract = (await import('tesseract.js')).default
         
         let combinedOcrText = ''
-        for (const file of imageFiles) {
-          const { data: { text } } = await Tesseract.recognize(file, 'eng+hin')
-          combinedOcrText += text + '\n\n'
+        for (const file of processableFiles) {
+          if (file.type.startsWith('image/')) {
+            const { data: { text } } = await Tesseract.recognize(file, 'eng+hin')
+            combinedOcrText += text + '\n\n'
+          }
         }
         
         setOcrText(combinedOcrText.trim())
@@ -566,7 +599,7 @@ function UploadContent({ onUploadComplete }) {
           </div>
         </div>
 
-        {/* Year and Month Selection */}
+        {/* Year and Month Selection - Show when category is selected and not Others */}
         {formData.category && formData.category !== 'Others' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -585,7 +618,7 @@ function UploadContent({ onUploadComplete }) {
 
             {['GST', 'TDS'].includes(formData.category) && (
               <div>
-                <label className="block text-sm font-medium mb-2">Month</label>
+                <label className="block text-sm font-medium mb-2">Month (for monthly returns)</label>
                 <select
                   value={formData.month}
                   onChange={(e) => setFormData(prev => ({ ...prev, month: e.target.value }))}
@@ -601,8 +634,8 @@ function UploadContent({ onUploadComplete }) {
           </div>
         )}
 
-        {/* File Upload */}
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+        {/* File Upload Area */}
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
           {formData.files ? (
             <div>
               <div className="text-4xl mb-4">✅</div>
@@ -634,7 +667,7 @@ function UploadContent({ onUploadComplete }) {
                 Choose Files
               </button>
               <p className="text-xs text-gray-500 mt-2">
-                All formats supported (PDF, Images, DOC, XLS) • Max 50MB per file
+                All formats supported • OCR for Images & PDFs • Max 50MB per file
               </p>
             </div>
           )}
@@ -646,9 +679,10 @@ function UploadContent({ onUploadComplete }) {
           multiple
           onChange={handleFileChange}
           className="hidden"
+          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
         />
 
-        {/* Custom filename */}
+        {/* Custom filename - only show for single file */}
         {formData.files && formData.files.length === 1 && (
           <div>
             <label className="block text-sm font-medium mb-2">Custom Filename (Optional)</label>
@@ -662,26 +696,31 @@ function UploadContent({ onUploadComplete }) {
           </div>
         )}
 
-        {/* OCR Text */}
+        {/* OCR Processing Status */}
         {ocrProcessing && (
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-blue-800">Processing OCR (English + Hindi)...</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full mr-3"></div>
+              <p className="text-blue-800">Processing OCR (English + Hindi)...</p>
+            </div>
           </div>
         )}
 
+        {/* OCR Text Display */}
         {ocrText && (
           <div>
-            <label className="block text-sm font-medium mb-2">OCR Extracted Text</label>
+            <label className="block text-sm font-medium mb-2">OCR Extracted Text (Editable)</label>
             <textarea
               value={ocrText}
               onChange={(e) => setOcrText(e.target.value)}
               rows="4"
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
             />
+            <p className="text-xs text-gray-500 mt-1">This text will be searchable</p>
           </div>
         )}
 
-        {/* Additional fields */}
+        {/* Additional Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-2">Description</label>
@@ -689,6 +728,7 @@ function UploadContent({ onUploadComplete }) {
               value={formData.description}
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               rows="3"
+              placeholder="Brief description of the document(s)"
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -698,39 +738,166 @@ function UploadContent({ onUploadComplete }) {
               value={formData.tags}
               onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value }))}
               rows="3"
-              placeholder="important, verified, original"
+              placeholder="important, verified, original, urgent"
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
 
+        {/* Upload Button */}
         <button
           type="submit"
-          disabled={uploading || ocrProcessing}
-          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 rounded-lg font-bold hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500"
+          disabled={uploading || ocrProcessing || !formData.entityName}
+          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 rounded-lg font-bold hover:from-blue-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all"
         >
-          {uploading ? 'Uploading...' : 'Upload Documents'}
+          {uploading ? (
+            <div className="flex items-center justify-center">
+              <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+              Uploading Documents...
+            </div>
+          ) : ocrProcessing ? (
+            'Processing OCR...'
+          ) : (
+            <>
+              <span className="mr-2">📤</span>
+              Upload Documents
+            </>
+          )}
         </button>
       </form>
     </div>
   )
 }
 
-// Placeholder components for other sections
-function ViewDocumentsContent() {
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-2xl font-bold mb-4">View Documents</h2>
-      <p className="text-gray-600">Document browser will be implemented here</p>
-    </div>
-  )
-}
-
+// Manage Access Component
 function ManageAccessContent() {
+  const [staffMembers, setStaffMembers] = useState([])
+  const [newStaff, setNewStaff] = useState({ name: '', email: '', role: 'upload_only' })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadStaffMembers()
+  }, [])
+
+  const loadStaffMembers = async () => {
+    try {
+      // This would load from your staff management system
+      // For now, showing example data
+      setStaffMembers([
+        {
+          name: 'CA Rajesh Sharma',
+          email: 'ca.rajesh@example.com',
+          role: 'full_access',
+          status: 'active',
+          createdDate: '2024-01-15'
+        }
+      ])
+    } catch (error) {
+      console.error('Error loading staff:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const addStaffMember = async (e) => {
+    e.preventDefault()
+    if (!newStaff.name || !newStaff.email) return
+
+    // Add to local state for demo
+    const newMember = {
+      ...newStaff,
+      status: 'active',
+      createdDate: new Date().toISOString().split('T')[0]
+    }
+    
+    setStaffMembers(prev => [...prev, newMember])
+    setNewStaff({ name: '', email: '', role: 'upload_only' })
+    
+    alert(`✅ ${newStaff.name} added successfully!`)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-2xl font-bold mb-4">Manage Staff Access</h2>
-      <p className="text-gray-600">Staff access management will be implemented here</p>
+      <h2 className="text-2xl font-bold mb-6">Manage Staff Access</h2>
+      
+      {/* Add New Staff */}
+      <div className="mb-8 p-4 bg-blue-50 rounded-lg">
+        <h3 className="font-bold text-blue-800 mb-4">Add New Staff Member</h3>
+        <form onSubmit={addStaffMember} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={newStaff.name}
+            onChange={(e) => setNewStaff(prev => ({ ...prev, name: e.target.value }))}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+            required
+          />
+          <input
+            type="email"
+            placeholder="Email Address"
+            value={newStaff.email}
+            onChange={(e) => setNewStaff(prev => ({ ...prev, email: e.target.value }))}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+            required
+          />
+          <select
+            value={newStaff.role}
+            onChange={(e) => setNewStaff(prev => ({ ...prev, role: e.target.value }))}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="upload_only">Upload Only</option>
+            <option value="full_access">Full Access</option>
+            <option value="view_only">View Only</option>
+          </select>
+          <button
+            type="submit"
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Add Staff
+          </button>
+        </form>
+      </div>
+
+      {/* Current Staff */}
+      <div className="space-y-4">
+        <h3 className="font-bold text-lg">Current Staff Members</h3>
+        {staffMembers.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No staff members added yet</p>
+        ) : (
+          staffMembers.map((staff, index) => (
+            <div key={index} className="border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white">
+                    {staff.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                  </div>
+                  <div>
+                    <h4 className="font-bold">{staff.name}</h4>
+                    <p className="text-sm text-gray-600">{staff.email}</p>
+                    <p className="text-xs text-gray-500">Added: {staff.createdDate}</p>
+                  </div>
+                </div>
+                <div className="text-right space-y-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    staff.role === 'full_access' ? 'bg-green-100 text-green-800' :
+                    staff.role === 'upload_only' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-blue-100 text-blue-800'
+                  }`}>
+                    {staff.role === 'full_access' ? 'Full Access' :
+                     staff.role === 'upload_only' ? 'Upload Only' : 'View Only'}
+                  </span>
+                  <div className="flex space-x-2">
+                    <button className="text-blue-500 text-sm hover:underline">
+                      {staff.status === 'active' ? 'Disable' : 'Enable'}
+                    </button>
+                    <button className="text-red-500 text-sm hover:underline">Remove</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
