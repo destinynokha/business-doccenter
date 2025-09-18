@@ -294,10 +294,17 @@ export default function EnhancedUpload({ onUploadComplete }) {
 
         {/* Add Entity Modal */}
         {showAddEntity && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                handleModalClose(e);
+              }
+            }}
+          >
+            <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-bold mb-4">Add New Entity</h3>
-              <form onSubmit={handleAddEntity} className="space-y-4">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Entity Name *</label>
                   <input
@@ -306,8 +313,13 @@ export default function EnhancedUpload({ onUploadComplete }) {
                     onChange={(e) => setNewEntity(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g., New Company Ltd, John Smith"
                     className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
                     autoFocus
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddEntity(e);
+                      }
+                    }}
                   />
                 </div>
                 <div>
@@ -327,7 +339,8 @@ export default function EnhancedUpload({ onUploadComplete }) {
                 </div>
                 <div className="flex space-x-3 pt-4">
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={handleAddEntity}
                     disabled={creatingEntity || !newEntity.name.trim()}
                     className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
                   >
@@ -342,7 +355,7 @@ export default function EnhancedUpload({ onUploadComplete }) {
                     Cancel
                   </button>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         )}
