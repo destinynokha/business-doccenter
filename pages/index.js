@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import Head from 'next/head'
 import ViewDocuments from '../components/ViewDocuments'
@@ -17,6 +17,38 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
 
+  // Memoize data loading to prevent unnecessary refreshes
+  const loadDashboardData = useCallback(async () => {
+    if (status !== 'authenticated') return
+    
+    try {
+      setLoading(true)
+      const response = await fetch('/api/dashboard/data')
+      if (response.ok) {
+        const data = await response.json()
+        setDashboardData(data)
+      } else {
+        // If API fails, set empty state
+        setDashboardData({
+          entities: [],
+          latestFiles: {},
+          stats: { totalDocuments: 0, activeEntities: 0, totalSize: 0 }
+        })
+      }
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+      // Set empty state on error
+      setDashboardData({
+        entities: [],
+        latestFiles: {},
+        stats: { totalDocuments: 0, activeEntities: 0, totalSize: 0 }
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [status])
+
+  // Load data only when session is authenticated
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
@@ -24,24 +56,23 @@ export default function Dashboard() {
       return
     }
     loadDashboardData()
-  }, [session, status])
+  }, [session, status, loadDashboardData])
 
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/dashboard/data')
-      if (response.ok) {
-        const data = await response.json()
-        setDashboardData(data)
+  // Handle visibility change to prevent unnecessary reloads
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // Don't reload data when page becomes visible again
+      // This prevents refresh when switching between apps
+      if (!document.hidden) {
+        console.log('Page became visible - not reloading data to prevent refresh')
       }
-    } catch (error) {
-      console.error('Error loading dashboard data:', error)
-    } finally {
-      setLoading(false)
     }
-  }
 
-  const handleSearch = async (query = searchQuery) => {
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
+
+  const handleSearch = useCallback(async (query = searchQuery) => {
     if (!query.trim()) {
       setSearchResults([])
       return
@@ -59,7 +90,7 @@ export default function Dashboard() {
     } finally {
       setSearching(false)
     }
-  }
+  }, [searchQuery])
 
   const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes'
