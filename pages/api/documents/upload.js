@@ -30,11 +30,11 @@ export default async function handler(req, res) {
     });
 
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve({ fields, files });
-      });
-    });
+  form.parse(req, (err, fields, files) => {
+    if (err) reject(err);
+    else resolve({ fields, files });
+  });
+});
 
     // Extract fields safely
     const entityName = Array.isArray(fields.entityName) ? fields.entityName[0] : fields.entityName;
