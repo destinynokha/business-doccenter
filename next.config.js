@@ -4,11 +4,6 @@ const nextConfig = {
   swcMinify: true,
   experimental: {
     serverComponentsExternalPackages: ['googleapis', 'mongodb']
-  },
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb'
-    }
   }
 }
 
