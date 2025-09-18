@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
-import { SessionProvider } from 'next-auth/react'
 import Head from 'next/head'
 import ViewDocuments from '../components/ViewDocuments'
+import EnhancedUpload from '../components/EnhancedUpload'
 
 export default function Dashboard() {
   const { data: session, status } = useSession()
@@ -296,7 +296,7 @@ export default function Dashboard() {
             />
           )}
           {activeSection === 'upload' && (
-            <UploadContent onUploadComplete={loadDashboardData} />
+            <EnhancedUpload onUploadComplete={loadDashboardData} />
           )}
           {activeSection === 'view-documents' && (
             <ViewDocuments />
