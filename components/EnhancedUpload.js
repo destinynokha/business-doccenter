@@ -19,15 +19,8 @@ export default function EnhancedUpload({ onUploadComplete }) {
   const [entities, setEntities] = useState([]);
   const [creatingEntity, setCreatingEntity] = useState(false);
 
-  const predefinedEntities = [
-    'ABC Manufacturing Ltd',
-    'XYZ Trading Co', 
-    'Family Business 3',
-    'Personal - Director',
-    'Personal - Spouse',
-    'Personal - Children',
-    'Personal - Parents'
-  ];
+  // Remove predefined entities - start with empty system
+  const predefinedEntities = [];
 
   const categories = [
     'GST',
@@ -58,13 +51,13 @@ export default function EnhancedUpload({ onUploadComplete }) {
       const response = await fetch('/api/entities/list');
       if (response.ok) {
         const data = await response.json();
-        setEntities([...predefinedEntities, ...data.filter(e => !predefinedEntities.includes(e))]);
+        setEntities(data); // Only use entities from database, no predefined ones
       } else {
-        setEntities(predefinedEntities);
+        setEntities([]); // Start with empty array
       }
     } catch (error) {
       console.error('Error loading entities:', error);
-      setEntities(predefinedEntities);
+      setEntities([]); // Start with empty array on error
     }
   };
 
