@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { createEntityFolderStructure } from '../../../lib/googleDrive';
+import { logActivity } from '../../../lib/mongodb';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -24,12 +25,26 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Entity type must be business or personal' });
     }
 
-    // Create folder structure in Google Drive
+    console.log(`Creating entity: ${entityName} (${entityType})`);
+
+    // Create folder structure in Google Drive immediately
     const folderStructure = await createEntityFolderStructure(entityName, entityType);
+    
+    // Log the activity
+    await logActivity({
+      action: 'entity_created',
+      entityName,
+      entityType,
+      userEmail: session.user.email,
+      userName: session.user.name,
+      details: `Created ${entityType} entity with folder structure`
+    });
+
+    console.log(`Entity created successfully: ${entityName}`);
     
     res.status(200).json({ 
       success: true, 
-      message: `Entity "${entityName}" created successfully`,
+      message: `Entity "${entityName}" created successfully with complete folder structure in Google Drive`,
       entityName,
       entityType,
       folderStructure
