@@ -75,7 +75,17 @@ export default async function handler(req, res) {
         }
 
         // ✅ Upload to Google Drive using a file stream
-        const driveFile = await uploadFileToGoogleDrive(fileBuffer, finalFileName, file.mimetype, targetFolder.id);
+       try {
+  const driveFile = await uploadFileToGoogleDrive(
+    fs.createReadStream(file.filepath),
+    finalFileName,
+    file.mimetype,
+    targetFolder.id
+  );
+} catch (err) {
+  console.error("Google Drive upload failed:", err);
+  throw err;
+}
 
 
         // Build file path for database
