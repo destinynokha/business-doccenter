@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       multiples: true,
     });
 
-    const [fields, files] = await form.parse(req);
+    const [fields, files] = await form.parse(req, (err, fields, files) => { … });
     
     const entityName = Array.isArray(fields.entityName) ? fields.entityName[0] : fields.entityName;
     const category = Array.isArray(fields.category) ? fields.category[0] : fields.category;
