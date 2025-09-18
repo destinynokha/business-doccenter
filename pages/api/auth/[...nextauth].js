@@ -18,7 +18,7 @@ function getUserPermissions(email) {
   }
 }
 
-export default NextAuth({
+export const authOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -85,4 +85,6 @@ export default NextAuth({
       console.log(`User signed out: ${session?.user?.email}`)
     }
   }
-})
+}
+
+export default NextAuth(authOptions)
