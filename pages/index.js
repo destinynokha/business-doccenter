@@ -853,21 +853,37 @@ function ManageAccessContent() {
   }
 
   const addStaffMember = async (e) => {
-    e.preventDefault()
-    if (!newStaff.name || !newStaff.email) return
-
-    // Add to local state for demo
-    const newMember = {
-      ...newStaff,
-      status: 'active',
-      createdDate: new Date().toISOString().split('T')[0]
+    e.preventDefault();
+    if (!newStaff.name || !newStaff.email) {
+      alert('Please fill in all required fields');
+      return;
     }
-    
-    setStaffMembers(prev => [...prev, newMember])
-    setNewStaff({ name: '', email: '', role: 'upload_only' })
-    
-    alert(`✅ ${newStaff.name} added successfully!`)
-  }
+
+    try {
+      const response = await fetch('/api/staff/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStaff)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add staff member');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Add to local state and reload from server
+        await loadStaffMembers();
+        setNewStaff({ name: '', email: '', role: 'upload_only' });
+        alert(`✅ ${result.staffMember.name} added successfully and saved to Google Drive!`);
+      }
+    } catch (error) {
+      console.error('Error adding staff:', error);
+      alert(`❌ Failed to add staff member: ${error.message}`);
+    }
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
