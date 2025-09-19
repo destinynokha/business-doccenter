@@ -7,7 +7,7 @@ import { saveDocument, logActivity } from '../../../lib/mongodb';
 
 export const config = {
   api: {
-    bodyParser: false, // disable default parser, required for formidable
+    bodyParser: false,
   },
 };
 
@@ -17,26 +17,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Check auth
     const session = await getServerSession(req, res, authOptions);
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Parse form data with Promise wrapper
     const form = formidable({
-      maxFileSize: 50 * 1024 * 1024, // 50MB
+      maxFileSize: 50 * 1024 * 1024, // 50MB limit
       multiples: true,
     });
 
-    const { fields, files } = await new Promise((resolve, reject) => {
-  form.parse(req, (err, fields, files) => {
-    if (err) reject(err);
-    else resolve({ fields, files });
-  });
-});
-
-    // Extract fields safely
+    const [fields, files] = await form.parse(req);
+    
     const entityName = Array.isArray(fields.entityName) ? fields.entityName[0] : fields.entityName;
     const category = Array.isArray(fields.category) ? fields.category[0] : fields.category;
     const financialYear = Array.isArray(fields.financialYear) ? fields.financialYear[0] : fields.financialYear;
@@ -53,40 +45,37 @@ export default async function handler(req, res) {
     // Handle multiple files
     const uploadedFiles = [];
     const fileArray = Array.isArray(files.documents) ? files.documents : [files.documents].filter(Boolean);
-
+    
     for (const file of fileArray) {
       if (!file) continue;
 
       try {
         // Determine final filename
         const finalFileName = customFileName || file.originalFilename;
-
-        // Get target folder
+        
+        // Get target folder based on hierarchy
         const targetFolder = await getTargetFolder(entityName, category, financialYear, month);
-
-        // Additional OCR (optional, basic here)
+        
+        // Read file buffer
+        const fileBuffer = fs.readFileSync(file.filepath);
+        
+        // Additional OCR processing for PDFs and images
         if (!ocrText && (file.mimetype.includes('image') || file.mimetype.includes('pdf'))) {
           try {
-            ocrText = await processFileOCR(file.filepath, file.mimetype);
+            ocrText = await processFileOCR(fileBuffer, file.mimetype);
           } catch (ocrError) {
             console.error('OCR processing failed:', ocrError);
             ocrText = '';
           }
         }
-
-        // ✅ Upload to Google Drive using a file stream
-       try {
-  const driveFile = await uploadFileToGoogleDrive(
-    fs.createReadStream(file.filepath),
-    finalFileName,
-    file.mimetype,
-    targetFolder.id
-  );
-} catch (err) {
-  console.error("Google Drive upload failed:", err);
-  throw err;
-}
-
+        
+        // Upload to Google Drive
+        const driveFile = await uploadFileToGoogleDrive(
+          fileBuffer, 
+          finalFileName, 
+          file.mimetype, 
+          targetFolder.id
+        );
 
         // Build file path for database
         const pathParts = [entityName];
@@ -98,8 +87,8 @@ export default async function handler(req, res) {
           pathParts.push(monthNames[parseInt(month) - 1]);
         }
         pathParts.push(finalFileName);
-
-        // Save metadata in DB
+        
+        // Save document metadata to database
         const documentData = {
           fileName: finalFileName,
           originalFileName: file.originalFilename,
@@ -117,11 +106,11 @@ export default async function handler(req, res) {
           uploadedBy: session.user.email,
           uploadedByName: session.user.name,
           createdAt: new Date(),
-          updatedAt: new Date(),
+          updatedAt: new Date()
         };
 
         const savedDocument = await saveDocument(documentData);
-
+        
         // Log activity
         await logActivity({
           action: 'document_upload',
@@ -131,18 +120,19 @@ export default async function handler(req, res) {
           category: category || 'Root',
           userEmail: session.user.email,
           userName: session.user.name,
-          timestamp: new Date(),
+          timestamp: new Date()
         });
 
         uploadedFiles.push({
           id: savedDocument.insertedId.toString(),
           fileName: finalFileName,
           googleDriveId: driveFile.id,
-          path: pathParts.join('/'),
+          path: pathParts.join('/')
         });
 
-        // Cleanup temp file
+        // Clean up temporary file
         fs.unlinkSync(file.filepath);
+        
       } catch (fileError) {
         console.error(`Error uploading file ${file.originalFilename}:`, fileError);
         if (fs.existsSync(file.filepath)) {
@@ -152,28 +142,35 @@ export default async function handler(req, res) {
       }
     }
 
-    res.status(200).json({
-      success: true,
+    res.status(200).json({ 
+      success: true, 
       message: `${uploadedFiles.length} file(s) uploaded successfully`,
-      files: uploadedFiles,
+      files: uploadedFiles
     });
 
   } catch (error) {
     console.error('Upload error:', error);
-    res.status(500).json({
-      error: 'Upload failed',
-      details: error.message,
+    res.status(500).json({ 
+      error: 'Upload failed', 
+      details: error.message 
     });
   }
 }
 
-// Simple OCR placeholder
-async function processFileOCR(filePath, mimeType) {
+// OCR processing function
+async function processFileOCR(fileBuffer, mimeType) {
   try {
-    if (mimeType.includes('image') || mimeType.includes('pdf')) {
-      // Ideally integrate pdf-parse / tesseract here
+    if (mimeType.includes('image')) {
+      // For images, use Tesseract.js (client-side processing preferred)
+      return ''; // OCR will be done client-side
+    }
+    
+    if (mimeType.includes('pdf')) {
+      // For PDFs, you could use pdf-parse + tesseract or similar
+      // For now, return empty string as PDFs are complex
       return '';
     }
+    
     return '';
   } catch (error) {
     console.error('OCR processing error:', error);
