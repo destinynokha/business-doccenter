@@ -834,19 +834,17 @@ function ManageAccessContent() {
 
   const loadStaffMembers = async () => {
     try {
-      // This would load from your staff management system
-      // For now, showing example data
-      setStaffMembers([
-        {
-          name: 'CA Rajesh Sharma',
-          email: 'ca.rajesh@example.com',
-          role: 'full_access',
-          status: 'active',
-          createdDate: '2024-01-15'
-        }
-      ])
+      const response = await fetch('/api/staff/list');
+      if (response.ok) {
+        const data = await response.json();
+        setStaffMembers(data || []);
+      } else {
+        console.error('Failed to load staff members');
+        setStaffMembers([]);
+      }
     } catch (error) {
       console.error('Error loading staff:', error)
+      setStaffMembers([]);
     } finally {
       setLoading(false)
     }
@@ -874,16 +872,82 @@ function ManageAccessContent() {
       const result = await response.json();
       
       if (result.success) {
-        // Add to local state and reload from server
         await loadStaffMembers();
         setNewStaff({ name: '', email: '', role: 'upload_only' });
-        alert(`✅ ${result.staffMember.name} added successfully and saved to Google Drive!`);
+        alert(`Staff member ${result.staffMember.name} added successfully and saved to Google Drive!`);
       }
     } catch (error) {
       console.error('Error adding staff:', error);
-      alert(`❌ Failed to add staff member: ${error.message}`);
+      alert(`Failed to add staff member: ${error.message}`);
     }
   };
+
+  const removeStaffMember = async (email) => {
+    if (!confirm('Are you sure you want to remove this staff member?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/staff/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove staff member');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadStaffMembers();
+        alert('Staff member removed successfully');
+      }
+    } catch (error) {
+      console.error('Error removing staff:', error);
+      alert(`Failed to remove staff member: ${error.message}`);
+    }
+  };
+
+  const toggleStaffStatus = async (email, currentStatus) => {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    
+    try {
+      const response = await fetch('/api/staff/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, status: newStatus })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update staff member');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        await loadStaffMembers();
+        alert(`Staff member ${newStatus === 'active' ? 'enabled' : 'disabled'} successfully`);
+      }
+    } catch (error) {
+      console.error('Error updating staff:', error);
+      alert(`Failed to update staff member: ${error.message}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-6">
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading staff members...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -956,10 +1020,18 @@ function ManageAccessContent() {
                      staff.role === 'upload_only' ? 'Upload Only' : 'View Only'}
                   </span>
                   <div className="flex space-x-2">
-                    <button className="text-blue-500 text-sm hover:underline">
+                    <button 
+                      onClick={() => toggleStaffStatus(staff.email, staff.status)}
+                      className="text-blue-500 text-sm hover:underline"
+                    >
                       {staff.status === 'active' ? 'Disable' : 'Enable'}
                     </button>
-                    <button className="text-red-500 text-sm hover:underline">Remove</button>
+                    <button 
+                      onClick={() => removeStaffMember(staff.email)}
+                      className="text-red-500 text-sm hover:underline"
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               </div>
