@@ -1,5 +1,3 @@
-// Replace your pages/api/auth/[...nextauth].js with this version
-
 import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 
@@ -25,11 +23,7 @@ export const authOptions = {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authorization: {
-        params: {
-          scope: "openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive"
-        }
-      }
+      // Remove Drive scopes - use basic authentication only
     })
   ],
   
@@ -51,26 +45,17 @@ export const authOptions = {
     },
     
     async jwt({ token, user, account }) {
-      // Add user permissions and access token to JWT token
+      // Add user permissions to JWT token
       if (user) {
         token.permissions = getUserPermissions(user.email)
       }
-      
-      // Store the OAuth access_token and refresh_token for Google Drive API
-      if (account) {
-        token.accessToken = account.access_token
-        token.refreshToken = account.refresh_token
-      }
-      
       return token
     },
     
     async session({ session, token }) {
       try {
-        // Add permissions and access token to session
+        // Add permissions to session
         session.user.permissions = token.permissions || 'admin'
-        session.accessToken = token.accessToken
-        session.refreshToken = token.refreshToken
         
         return session
       } catch (error) {
