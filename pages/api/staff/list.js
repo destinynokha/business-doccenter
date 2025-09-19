@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
-import { getStaffMembers } from '../../../lib/mongodb';
+import { readStaffAccessCSV } from '../../../lib/googleDrive';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -18,14 +18,13 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const staffMembers = await getStaffMembers();
+    // Read staff members from Google Drive CSV
+    const staffMembers = await readStaffAccessCSV();
     res.status(200).json(staffMembers);
 
   } catch (error) {
     console.error('Error getting staff members:', error);
-    res.status(500).json({ 
-      error: 'Failed to get staff members', 
-      details: error.message 
-    });
+    // Return empty array if CSV doesn't exist yet
+    res.status(200).json([]);
   }
 }
