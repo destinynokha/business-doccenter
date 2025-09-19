@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
-import { getEntities } from '../../../lib/mongodb';
+import { drive } from '../../../lib/googleDrive';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -13,8 +13,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const entities = await getEntities();
-    res.status(200).json(entities.map(e => e.entityName));
+    // Get entities by listing folders in the main Google Drive folder
+    const mainFolderId = process.env.MAIN_DRIVE_FOLDER_ID;
+    
+    const folders = await drive.files.list({
+      q: `parents in '${mainFolderId}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name, createdTime)',
+      orderBy: 'name'
+    });
+
+    const entities = folders.data.files ? folders.data.files.map(folder => folder.name) : [];
+    
+    console.log(`Found ${entities.length} entities:`, entities);
+    
+    res.status(200).json(entities);
 
   } catch (error) {
     console.error('Error getting entities:', error);
