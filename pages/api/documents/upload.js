@@ -1,3 +1,5 @@
+// Replace your pages/api/documents/upload.js with this OAuth version
+
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import formidable from 'formidable';
@@ -15,43 +17,36 @@ export default async function handler(req, res) {
   // Set timeout for the entire request
   res.setTimeout(5 * 60 * 1000); // 5 minutes
 
-  console.log('=== UPLOAD DEBUG START ===');
+  console.log('=== OAUTH UPLOAD DEBUG START ===');
   console.log('Method:', req.method);
-  console.log('Environment check:', {
-    NODE_ENV: process.env.NODE_ENV,
-    NEXTAUTH_SECRET: !!process.env.NEXTAUTH_SECRET,
-    MONGODB_URI: !!process.env.MONGODB_URI,
-    GOOGLE_SERVICE_ACCOUNT_EMAIL: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    GOOGLE_PRIVATE_KEY: !!process.env.GOOGLE_PRIVATE_KEY,
-    MAIN_DRIVE_FOLDER_ID: !!process.env.MAIN_DRIVE_FOLDER_ID,
-  });
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Check authentication first
-    console.log('Checking session...');
+    // Check authentication and get access token
+    console.log('Checking session and access token...');
     const session = await getServerSession(req, res, authOptions);
     if (!session) {
       console.log('No session found');
       return res.status(401).json({ error: 'Unauthorized - Please sign in again' });
     }
-    console.log('Session OK:', session.user?.email);
+
+    if (!session.accessToken) {
+      console.log('No access token found');
+      return res.status(401).json({ error: 'No Google Drive access token - Please sign out and sign in again' });
+    }
+    
+    console.log('Session and access token OK:', session.user?.email);
 
     // Validate environment variables
-    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.MAIN_DRIVE_FOLDER_ID) {
-      console.error('Missing Google credentials');
-      return res.status(500).json({ error: 'Server configuration error - Google credentials missing' });
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.MAIN_DRIVE_FOLDER_ID) {
+      console.error('Missing Google OAuth credentials');
+      return res.status(500).json({ error: 'Server configuration error - Google OAuth credentials missing' });
     }
 
-    if (!process.env.MONGODB_URI) {
-      console.error('Missing MongoDB URI');
-      return res.status(500).json({ error: 'Server configuration error - Database connection missing' });
-    }
-
-    // Parse form data with error handling
+    // Parse form data
     console.log('Parsing form data...');
     const form = formidable({
       maxFileSize: 50 * 1024 * 1024, // 50MB limit
@@ -63,8 +58,6 @@ export default async function handler(req, res) {
     try {
       [fields, files] = await form.parse(req);
       console.log('Form parsed successfully');
-      console.log('Fields:', Object.keys(fields));
-      console.log('Files:', Object.keys(files));
     } catch (parseError) {
       console.error('Form parsing failed:', parseError);
       return res.status(400).json({ 
@@ -87,18 +80,14 @@ export default async function handler(req, res) {
       entityName,
       category,
       financialYear,
-      month,
-      hasCustomFileName: !!customFileName,
-      hasDescription: !!description,
-      hasTags: !!tags,
-      hasOcrText: !!ocrText
+      month
     });
 
     if (!entityName || entityName.trim() === '') {
       return res.status(400).json({ error: 'Entity name is required' });
     }
 
-    // Validate and process files
+    // Process files
     const uploadedFiles = [];
     const fileArray = files.documents ? 
       (Array.isArray(files.documents) ? files.documents : [files.documents]) 
@@ -108,7 +97,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
-    console.log(`Processing ${fileArray.length} file(s)`);
+    console.log(`Processing ${fileArray.length} file(s) with OAuth`);
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
@@ -118,8 +107,6 @@ export default async function handler(req, res) {
         console.log(`\n--- Processing file ${i + 1}/${fileArray.length} ---`);
         console.log(`File: ${file.originalFilename}`);
         console.log(`Size: ${file.size} bytes`);
-        console.log(`Type: ${file.mimetype}`);
-        console.log(`Path: ${file.filepath}`);
 
         // Validate file
         if (!file.originalFilename || file.size === 0) {
@@ -134,20 +121,21 @@ export default async function handler(req, res) {
         
         console.log(`Final filename: ${finalFileName}`);
         
-        // Get target folder - simplified approach
-        console.log('Getting target folder...');
-        let targetFolder;
-        try {
-          targetFolder = await getTargetFolder(entityName.trim(), category, financialYear, month);
-          console.log('Target folder ID:', targetFolder?.id);
-          
-          if (!targetFolder || !targetFolder.id) {
-            throw new Error('Failed to create/get target folder');
-          }
-        } catch (folderError) {
-          console.error('Folder creation failed:', folderError);
-          throw new Error(`Folder creation failed: ${folderError.message}`);
+        // Get target folder using OAuth
+        console.log('Getting target folder with OAuth...');
+        const targetFolder = await getTargetFolder(
+          entityName.trim(), 
+          category, 
+          financialYear, 
+          month, 
+          session.accessToken
+        );
+        
+        if (!targetFolder || !targetFolder.id) {
+          throw new Error('Failed to create/get target folder');
         }
+        
+        console.log('Target folder ID:', targetFolder.id);
         
         // Read file buffer
         let fileBuffer;
@@ -158,9 +146,6 @@ export default async function handler(req, res) {
             throw new Error(`File not found at: ${file.filepath}`);
           }
           
-          const stats = fs.statSync(file.filepath);
-          console.log(`File stats: ${stats.size} bytes`);
-          
           fileBuffer = fs.readFileSync(file.filepath);
           console.log(`Buffer created: ${fileBuffer.length} bytes`);
           
@@ -168,40 +153,26 @@ export default async function handler(req, res) {
             throw new Error('File buffer is empty');
           }
           
-          if (fileBuffer.length !== file.size) {
-            console.warn(`Buffer size mismatch: expected ${file.size}, got ${fileBuffer.length}`);
-          }
-          
         } catch (readError) {
           console.error('File read error:', readError);
           throw new Error(`Failed to read file: ${readError.message}`);
         }
         
-        // Upload to Google Drive
-        console.log('Uploading to Google Drive...');
-        let driveFile;
-        try {
-          driveFile = await uploadFileToGoogleDrive(
-            fileBuffer, 
-            finalFileName, 
-            file.mimetype, 
-            targetFolder.id
-          );
-          
-          console.log('Drive upload result:', {
-            id: driveFile?.id,
-            name: driveFile?.name,
-            size: driveFile?.size
-          });
-          
-          if (!driveFile || !driveFile.id) {
-            throw new Error('Google Drive upload returned no file ID');
-          }
-          
-        } catch (driveError) {
-          console.error('Google Drive upload failed:', driveError);
-          throw new Error(`Google Drive upload failed: ${driveError.message}`);
+        // Upload to Google Drive using OAuth
+        console.log('Uploading to Google Drive with OAuth...');
+        const driveFile = await uploadFileToGoogleDrive(
+          fileBuffer, 
+          finalFileName, 
+          file.mimetype, 
+          targetFolder.id,
+          session.accessToken
+        );
+        
+        if (!driveFile || !driveFile.id) {
+          throw new Error('Google Drive upload returned no file ID');
         }
+        
+        console.log('OAuth Drive upload successful:', driveFile.id);
 
         // Build file path for database
         const pathParts = [entityName.trim()];
@@ -228,7 +199,7 @@ export default async function handler(req, res) {
         const filePath = pathParts.join('/');
         console.log('File path:', filePath);
         
-        // Prepare document data for database
+        // Save to database
         const documentData = {
           fileName: finalFileName,
           originalFileName: file.originalFilename,
@@ -250,19 +221,12 @@ export default async function handler(req, res) {
         };
 
         console.log('Saving to database...');
-        let savedDocument;
-        try {
-          savedDocument = await saveDocument(documentData);
-          console.log('Database save result:', savedDocument?.insertedId?.toString());
-          
-          if (!savedDocument?.insertedId) {
-            throw new Error('Database save failed - no document ID returned');
-          }
-          
-        } catch (dbError) {
-          console.error('Database save failed:', dbError);
-          // Don't fail the entire upload for database issues
-          console.warn('Continuing despite database error...');
+        const savedDocument = await saveDocument(documentData);
+        
+        if (!savedDocument?.insertedId) {
+          console.warn('Database save failed, continuing...');
+        } else {
+          console.log('Database save successful');
         }
         
         // Log activity (optional)
@@ -299,7 +263,7 @@ export default async function handler(req, res) {
           console.warn('Cleanup error (non-critical):', cleanupError);
         }
         
-        console.log(`File ${finalFileName} processed successfully`);
+        console.log(`File ${finalFileName} processed successfully with OAuth`);
         
       } catch (fileError) {
         console.error(`Error processing file ${file?.originalFilename}:`, fileError);
@@ -313,7 +277,6 @@ export default async function handler(req, res) {
           console.warn('Error during cleanup:', cleanupError);
         }
         
-        // Continue with other files or fail completely based on your preference
         throw new Error(`Failed to process ${file?.originalFilename}: ${fileError.message}`);
       }
     }
@@ -322,8 +285,8 @@ export default async function handler(req, res) {
       throw new Error('No files were successfully processed');
     }
 
-    console.log(`Upload completed successfully. ${uploadedFiles.length} file(s) processed.`);
-    console.log('=== UPLOAD DEBUG END ===');
+    console.log(`OAuth upload completed successfully. ${uploadedFiles.length} file(s) processed.`);
+    console.log('=== OAUTH UPLOAD DEBUG END ===');
 
     res.status(200).json({ 
       success: true, 
@@ -332,8 +295,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error('=== UPLOAD ERROR ===');
-    console.error('Error name:', error.name);
+    console.error('=== OAUTH UPLOAD ERROR ===');
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
     
@@ -351,15 +313,11 @@ export default async function handler(req, res) {
       console.warn('Final cleanup error:', cleanupError);
     }
     
-    console.error('=== END ERROR ===');
+    console.error('=== END OAUTH ERROR ===');
     
     res.status(500).json({ 
       error: 'Upload failed', 
-      details: error.message,
-      ...(process.env.NODE_ENV === 'development' && { 
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      })
+      details: error.message
     });
   }
 }
