@@ -243,7 +243,7 @@ export default function Dashboard() {
                 { id: 'dashboard', name: 'Dashboard', icon: '📊' },
                 { id: 'upload', name: 'Upload', icon: '📤' },
                 { id: 'view-documents', name: 'View Documents', icon: '📂' },
-                { id: 'manage-access', name: 'Manage Access', icon: '👥' }
+                
               ].map((tab) => (
                 <button
                   key={tab.id}
