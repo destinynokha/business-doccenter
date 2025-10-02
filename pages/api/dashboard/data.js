@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import { getDocuments } from '../../../lib/mongodb';
-import { getLatestFilesByEntity } from '../../../lib/googleDrive';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -14,7 +13,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Get all documents from database
+    // Get all documents from MongoDB
     const documents = await getDocuments();
     
     // Extract unique entities
@@ -27,33 +26,41 @@ export default async function handler(req, res) {
       totalSize: documents.reduce((sum, doc) => sum + (doc.fileSize || 0), 0)
     };
     
-    // Get latest files for each entity (from Google Drive)
+    // Get latest files for each entity from MongoDB
     const latestFiles = {};
     
     for (const entity of entities) {
       try {
-        // Get latest files from Google Drive
-        const files = await getLatestFilesByEntity(entity, 10);
+        // Get latest 10 files for this entity
+        const entityDocs = documents
+          .filter(doc => doc.entityName === entity)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 10)
+          .map(doc => ({
+            id: doc._id.toString(),
+            googleDriveId: doc.googleDriveId,
+            googleDriveLink: doc.googleDriveLink,
+            name: doc.fileName,
+            fileName: doc.fileName,
+            path: doc.filePath,
+            mimeType: doc.mimeType,
+            fileSize: doc.fileSize,
+            createdAt: doc.createdAt,
+            category: doc.category,
+            financialYear: doc.financialYear,
+            month: doc.month,
+            ocrText: doc.ocrText || '',
+            tags: doc.tags || [],
+            description: doc.description || ''
+          }));
         
-        // Enrich with database metadata
-        const enrichedFiles = files.map(file => {
-          const dbDoc = documents.find(doc => doc.googleDriveId === file.id);
-          return {
-            ...file,
-            path: dbDoc ? dbDoc.filePath : file.path,
-            ocrText: dbDoc ? dbDoc.ocrText : '',
-            tags: dbDoc ? dbDoc.tags : [],
-            description: dbDoc ? dbDoc.description : ''
-          };
-        });
-        
-        latestFiles[entity] = enrichedFiles;
+        latestFiles[entity] = entityDocs;
       } catch (error) {
         console.error(`Error getting files for entity ${entity}:`, error);
         latestFiles[entity] = [];
       }
     }
-
+    
     const dashboardData = {
       entities,
       latestFiles,
@@ -61,7 +68,7 @@ export default async function handler(req, res) {
     };
 
     res.status(200).json(dashboardData);
-
+    
   } catch (error) {
     console.error('Dashboard data error:', error);
     res.status(500).json({ 
