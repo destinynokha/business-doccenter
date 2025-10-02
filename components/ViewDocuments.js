@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
 
 export default function ViewDocuments() {
-  const [selectedEntity, setSelectedEntity] = useState('');
   const [entities, setEntities] = useState([]);
-  const [folderStructure, setFolderStructure] = useState(null);
+  const [selectedEntity, setSelectedEntity] = useState('');
+  const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState([]);
 
+  // Load entities on mount
   useEffect(() => {
     loadEntities();
   }, []);
 
+  // Load documents when entity changes
   useEffect(() => {
     if (selectedEntity) {
-      loadFolderStructure(selectedEntity);
+      loadDocuments(selectedEntity);
+    } else {
+      setDocuments([]);
     }
   }, [selectedEntity]);
 
@@ -23,43 +26,48 @@ export default function ViewDocuments() {
       if (response.ok) {
         const data = await response.json();
         setEntities(data);
+        if (data.length > 0) {
+          setSelectedEntity(data[0]); // Auto-select first entity
+        }
       }
     } catch (error) {
       console.error('Error loading entities:', error);
     }
   };
 
-  const loadFolderStructure = async (entityName) => {
+  const loadDocuments = async (entity) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/documents/structure?entity=${encodeURIComponent(entityName)}`);
+      const response = await fetch(`/api/documents/list?entity=${encodeURIComponent(entity)}`);
       if (response.ok) {
         const data = await response.json();
-        setFolderStructure(data);
-        setCurrentPath([entityName]);
+        setDocuments(data);
+      } else {
+        setDocuments([]);
       }
     } catch (error) {
-      console.error('Error loading folder structure:', error);
-      setFolderStructure(null);
+      console.error('Error loading documents:', error);
+      setDocuments([]);
     } finally {
       setLoading(false);
     }
   };
 
   const formatFileSize = (bytes) => {
-    if (!bytes) return '0 B';
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
       day: '2-digit',
-      month: '2-digit', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: 'short',
+      year: 'numeric'
     });
   };
 
@@ -72,130 +80,35 @@ export default function ViewDocuments() {
     return '📎';
   };
 
-  const openFile = (file) => {
-    if (file.webViewLink) {
-      window.open(file.webViewLink, '_blank');
-    } else {
-      window.open(`https://drive.google.com/file/d/${file.id}/view`, '_blank');
+  const openFile = (googleDriveLink, googleDriveId) => {
+    const url = googleDriveLink || `https://drive.google.com/file/d/${googleDriveId}/view`;
+    window.open(url, '_blank');
+  };
+
+  // Group documents by category
+  const groupedDocuments = documents.reduce((acc, doc) => {
+    const category = doc.category || 'Uncategorized';
+    if (!acc[category]) {
+      acc[category] = [];
     }
-  };
-
-  const navigateToFolder = (folder, path) => {
-    // This would expand folder view - for now just show message
-    alert(`Navigate to: ${path.join('/')}/${folder.name}`);
-  };
-
-  const renderFolderContents = (structure) => {
-    if (!structure || !structure.structure) return null;
-
-    const folders = structure.structure.filter(item => item.type === 'folder');
-    const files = structure.structure.filter(item => item.type === 'file');
-
-    return (
-      <div className="space-y-6">
-        {/* Folders */}
-        {folders.length > 0 && (
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">Folders</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {folders.map((folder) => (
-                <div
-                  key={folder.id}
-                  className="border rounded-lg p-4 hover:shadow-md cursor-pointer transition-shadow"
-                  onClick={() => navigateToFolder(folder, currentPath)}
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className="text-2xl">📁</span>
-                    <div className="flex-1">
-                      <h5 className="font-medium text-gray-900">{folder.name}</h5>
-                      <p className="text-sm text-gray-500">
-                        {folder.fileCount || 0} files
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Created: {formatDate(folder.createdTime)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Files */}
-        {files.length > 0 && (
-          <div>
-            <h4 className="font-medium text-gray-900 mb-3">
-              Files ({files.length})
-            </h4>
-            <div className="space-y-2">
-              {files.map((file) => (
-                <div
-                  key={file.id}
-                  className="border rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => openFile(file)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3 flex-1">
-                      <span className="text-xl">{getFileIcon(file.mimeType)}</span>
-                      <div className="flex-1 min-w-0">
-                        <h5 className="font-medium text-blue-600 hover:underline truncate">
-                          {file.name}
-                        </h5>
-                        {file.path && (
-                          <p className="text-sm text-gray-500 truncate">
-                            Path: {file.path}
-                          </p>
-                        )}
-                        <div className="flex items-center space-x-4 text-xs text-gray-400 mt-1">
-                          <span>{formatFileSize(file.size)}</span>
-                          <span>{formatDate(file.createdTime)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openFile(file);
-                      }}
-                      className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-                    >
-                      View
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {folders.length === 0 && files.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">📂</div>
-            <p className="text-gray-500">No documents found</p>
-            <p className="text-sm text-gray-400">Upload some documents to get started</p>
-          </div>
-        )}
-      </div>
-    );
-  };
+    acc[category].push(doc);
+    return acc;
+  }, {});
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">View Documents</h2>
+    <div className="space-y-6">
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-2xl font-bold mb-4">View Documents</h2>
         
-        {/* Entity Selection */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Entity/Person
-          </label>
+        {/* Entity Selector */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium mb-2">Select Entity/Person</label>
           <select
             value={selectedEntity}
             onChange={(e) => setSelectedEntity(e.target.value)}
-            className="w-full md:w-64 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            className="w-full md:w-1/3 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">Choose Entity...</option>
+            <option value="">Choose an entity...</option>
             {entities.map((entity) => (
               <option key={entity} value={entity}>
                 {entity}
@@ -204,39 +117,96 @@ export default function ViewDocuments() {
           </select>
         </div>
 
-        {/* Breadcrumb */}
-        {currentPath.length > 0 && (
-          <nav className="flex mb-4" aria-label="Breadcrumb">
-            <ol className="inline-flex items-center space-x-1 md:space-x-3">
-              {currentPath.map((path, index) => (
-                <li key={index} className="inline-flex items-center">
-                  {index > 0 && (
-                    <svg className="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                  <span className="text-sm font-medium text-gray-500">
-                    {path}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </nav>
+        {/* Selected Entity Display */}
+        {selectedEntity && (
+          <div className="mb-4">
+            <h3 className="text-xl font-bold text-gray-900">{selectedEntity}</h3>
+            <p className="text-sm text-gray-500">
+              {documents.length} document{documents.length !== 1 ? 's' : ''} found
+            </p>
+          </div>
         )}
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading documents...</p>
+      {/* Loading State */}
+      {loading && (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
-      ) : selectedEntity ? (
-        renderFolderContents(folderStructure)
-      ) : (
-        <div className="text-center py-12">
-          <div className="text-4xl mb-4">📂</div>
-          <p className="text-gray-500">Select an entity to view documents</p>
+      )}
+
+      {/* Documents Display */}
+      {!loading && selectedEntity && documents.length === 0 && (
+        <div className="bg-white rounded-lg shadow p-12 text-center">
+          <div className="text-6xl mb-4">📂</div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">No Documents Yet</h3>
+          <p className="text-gray-600">
+            Upload your first document for {selectedEntity} to get started
+          </p>
+        </div>
+      )}
+
+      {/* Grouped Documents */}
+      {!loading && documents.length > 0 && (
+        <div className="space-y-6">
+          {Object.entries(groupedDocuments).map(([category, docs]) => (
+            <div key={category} className="bg-white rounded-lg shadow">
+              <div className="p-4 border-b bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-900">
+                  {category} ({docs.length})
+                </h3>
+              </div>
+              <div className="p-4">
+                <div className="grid gap-4">
+                  {docs.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="border rounded-lg p-4 hover:shadow-md cursor-pointer transition-shadow"
+                      onClick={() => openFile(doc.googleDriveLink, doc.googleDriveId)}
+                    >
+                      <div className="flex items-start space-x-4">
+                        <span className="text-3xl">{getFileIcon(doc.mimeType)}</span>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-blue-600 hover:underline">
+                            {doc.fileName}
+                          </h4>
+                          <p className="text-sm text-gray-500 mt-1">
+                            {doc.filePath}
+                          </p>
+                          <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
+                            <span>{formatFileSize(doc.fileSize)}</span>
+                            <span>•</span>
+                            <span>{formatDate(doc.createdAt)}</span>
+                            {doc.financialYear && (
+                              <>
+                                <span>•</span>
+                                <span>FY {doc.financialYear}</span>
+                              </>
+                            )}
+                          </div>
+                          {doc.tags && doc.tags.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {doc.tags.map((tag, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {doc.description && (
+                            <p className="text-sm text-gray-600 mt-2">{doc.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
