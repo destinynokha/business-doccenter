@@ -263,13 +263,24 @@ export default async function handler(req, res) {
     console.error('Error name:', error.name);
     console.error('Error message:', error.message);
     console.error('Error stack:', error.stack);
+    
+    // Check specific error types
+    if (error.message?.includes('authentication') || error.message?.includes('credentials')) {
+      console.error('Google Drive authentication error');
+    } else if (error.message?.includes('MongoDB') || error.message?.includes('database')) {
+      console.error('Database error');
+    } else if (error.message?.includes('entityName')) {
+      console.error('Missing entity name');
+    }
+    
     console.error('=== END ERROR ===');
     
     res.status(500).json({ 
       error: 'Upload failed', 
       details: error.message,
-      // Only include stack in development
-      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+      errorType: error.name,
+      // Include stack trace to help debug
+      stack: error.stack
     });
   }
 }
