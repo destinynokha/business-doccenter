@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ShareFolder from './ShareFolder';
 
 export default function ViewDocuments() {
   const [entities, setEntities] = useState([]);
@@ -20,6 +21,20 @@ export default function ViewDocuments() {
     }
   }, [selectedEntity]);
 
+
+  const [showShare, setShowShare] = useState(false);
+
+// Add this button near the entity selector:
+{selectedEntity && (
+  <button
+    onClick={() => setShowShare(true)}
+    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+  >
+    Share Folders
+  </button>
+)}
+
+  
   const loadEntities = async () => {
     try {
       const response = await fetch('/api/entities/list');
@@ -212,3 +227,6 @@ export default function ViewDocuments() {
     </div>
   );
 }
+
+
+{showShare && <ShareFolder entityName={selectedEntity} />}
